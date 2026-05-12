@@ -43,11 +43,3 @@ Run the server on your laptop, then on your phone open:
 (Find your IP with `ipconfig` on Windows or `ifconfig` on Mac/Linux)
 The upload button will trigger the phone camera directly.
 
-## Giving to Cursor
-Open the acne-app folder in Cursor.
-Suggested prompt to improve the UI or add features:
-> "This is a FastAPI + HTML acne diagnosis app. The backend is in main.py
->  and the frontend in templates/index.html. The /predict endpoint accepts
->  an image upload and returns predicted_class, confidence, severity,
->  description, recommendation, and all_confidences as JSON.
->  [describe what you want changed]"
