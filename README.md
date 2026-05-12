@@ -1,4 +1,4 @@
-# AcneLens — Acne Diagnosis Web App
+# DermaScan - A Skin-Analysis Web Application
 
 ## Folder structure
 ```
