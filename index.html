@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="theme-color" content="#f5f0eb"/>
+  <meta name="description" content="AI-assisted acne skin photo analysis for informational use only."/>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg"/>
+  <title>{{ title }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <style>
+    /* ── Reset & Variables ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:rgba(212, 209, 206, 0.86);
+      --surface:    #ffffff;
+      --border:rgb(243, 241, 239);
+      --ink:        #1a1410;
+      --ink-muted:  #7a6f68;
+      --accent:     #c4622d;
+      --accent-lt:  #f2e8e1;
+      --green:      #3a7d5a;
+      --yellow:     #c49a2d;
+      --red:        #b83232;
+      --radius:     16px;
+      --shadow:     0 4px 24px rgba(0,0,0,0.08);
+      /* Same crop box for every upload (width/height of display, not pixel count). */
+      --photo-aspect: 1 / 1;
+      --preview-photo-max: 400px;
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      min-height: 100vh;
+      padding: 0 0 60px;
+    }
+
+    /* ── Header ────────────────────────────────────────────────────── */
+    header {
+      padding: 32px 24px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      text-align: center;
+    }
+    header h1 {
+      font-family: 'DM Serif Display', serif;
+      font-size: clamp(1.8rem, 5vw, 2.6rem);
+      letter-spacing: -0.02em;
+      color: var(--ink);
+    }
+    header h1 span { color: var(--accent); font-style: italic; }
+    header p {
+      margin-top: 6px;
+      font-size: 0.9rem;
+      color: var(--ink-muted);
+      font-weight: 300;
+    }
+
+    /* ── Layout ────────────────────────────────────────────────────── */
+    main {
+      max-width: 820px;
+      margin: 40px auto 0;
+      padding: 0 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* ── Upload Card ───────────────────────────────────────────────── */
+    .upload-card {
+      background: var(--surface);
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 36px 24px 40px;
+      text-align: center;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+    }
+    .upload-card:hover, .upload-card.drag-over {
+      border-color: var(--accent);
+      background: var(--accent-lt);
+    }
+    .upload-icon {
+      width: 52px; height: 52px;
+      border-radius: 50%;
+      background: var(--accent-lt);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 16px;
+    }
+    .upload-icon svg { width: 24px; height: 24px; stroke: var(--accent); fill: none; }
+    .upload-card h2 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.2rem; margin-bottom: 6px;
+    }
+    .upload-card p { font-size: 0.85rem; color: var(--ink-muted); margin-bottom: 20px; }
+    .upload-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: center;
+      align-items: center;
+    }
+    .upload-actions button {
+      font-family: 'DM Sans', sans-serif;
+      padding: 12px 26px;
+      border-radius: 100px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.2s, transform 0.1s, border-color 0.2s, background 0.2s, color 0.2s;
+    }
+    .upload-actions button:active { transform: scale(0.97); }
+    .btn-gallery {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-gallery:hover { opacity: 0.9; }
+    .btn-selfie {
+      background: var(--surface);
+      color: var(--accent);
+      border: 2px solid var(--accent) !important;
+    }
+    .btn-selfie:hover {
+      background: var(--accent-lt);
+    }
+
+    /* Camera modal (desktop / browsers with getUserMedia) */
+    .camera-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      box-sizing: border-box;
+    }
+    .camera-modal.is-open { display: flex; }
+    .camera-modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(26, 20, 16, 0.55);
+      backdrop-filter: blur(4px);
+    }
+    .camera-modal-panel {
+      position: relative;
+      width: min(100%, 420px);
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    #camera-video {
+      width: 100%;
+      display: block;
+      max-height: min(70vh, 520px);
+      background: #111;
+      object-fit: cover;
+      aspect-ratio: 1 / 1;
+    }
+    .camera-modal-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      padding: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .camera-modal-actions button {
+      font-family: 'DM Sans', sans-serif;
+      padding: 12px 22px;
+      border-radius: 100px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      flex: 1;
+      border: none;
+      transition: opacity 0.2s;
+    }
+    #camera-cancel {
+      background: transparent;
+      border: 1.5px solid var(--border) !important;
+      color: var(--ink-muted);
+    }
+    #camera-cancel:hover { border-color: var(--accent); color: var(--accent); }
+    #camera-capture {
+      background: var(--accent);
+      color: #fff;
+    }
+    #camera-capture:hover { opacity: 0.9; }
+
+    /* ── Preview ───────────────────────────────────────────────────── */
+    #preview-container {
+      display: none;
+      background: var(--surface);
+      border-radius: var(--radius);
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    /* Fixed frame: large/small uploads and any aspect ratio fill this box consistently. */
+    .skin-photo-frame {
+      aspect-ratio: var(--photo-aspect);
+      width: 100%;
+      overflow: hidden;
+      border-radius: 12px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+    }
+    .skin-photo-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center center;
+      display: block;
+    }
+    .skin-photo-frame--preview {
+      max-width: min(var(--preview-photo-max), 100%);
+      margin: 20px auto 0;
+    }
+    .skin-photo-frame--report {
+      max-width: min(var(--preview-photo-max), 100%);
+      margin-inline: auto;
+    }
+    .preview-bar {
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-top: 1px solid var(--border);
+    }
+    .preview-bar span { font-size: 0.85rem; color: var(--ink-muted); }
+    #analyze-btn {
+      background: var(--accent);
+      color: white;
+      border: none;
+      padding: 10px 28px;
+      border-radius: 100px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+    }
+    #analyze-btn:hover   { opacity: 0.88; }
+    #analyze-btn:active  { transform: scale(0.97); }
+    #analyze-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Loading ───────────────────────────────────────────────────── */
+    #loading {
+      display: none;
+      text-align: center;
+      padding: 32px;
+      background: var(--surface);
+      border-radius: var(--radius);
+    }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading p { color: var(--ink-muted); font-size: 0.9rem; }
+
+    /* ── Results Card ──────────────────────────────────────────────── */
+    #results {
+      display: none;
+      background: var(--surface);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .results-photo-hero {
+      text-align: center;
+      padding: 24px 24px 28px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(to bottom, var(--bg), var(--surface));
+    }
+    .results-photo-label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ink-muted);
+      margin: 0 0 14px;
+    }
+    .results-file-name {
+      display: block;
+      margin-top: 12px;
+      font-size: 0.78rem;
+      color: var(--ink-muted);
+      word-break: break-all;
+      line-height: 1.4;
+      padding: 0 8px;
+    }
+    .results-details {
+      min-width: 0;
+    }
+    .results-header {
+      padding: 24px 24px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .results-header h2 {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.4rem;
+      margin-bottom: 4px;
+    }
+    .results-header p { font-size: 0.85rem; color: var(--ink-muted); }
+
+    /* Diagnosis row */
+    .diagnosis-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .acne-badge {
+      flex-shrink: 0;
+      padding: 6px 18px;
+      border-radius: 100px;
+      font-weight: 500;
+      font-size: 1rem;
+      letter-spacing: 0.01em;
+    }
+    .confidence-label {
+      font-size: 0.82rem;
+      color: var(--ink-muted);
+    }
+    .confidence-label strong { color: var(--ink); font-size: 1rem; }
+
+    /* Severity badge colors */
+    .sev-None     { background: #e6f4ec; color: var(--green); }
+    .sev-Mild     { background: #fef6e4; color: var(--yellow); }
+    .sev-Moderate { background: #fdeede; color: var(--accent); }
+    .sev-Severe   { background: #fde8e8; color: var(--red); }
+    .sev-Post-Acne{ background: #ede8f5; color: #6b4fa0; }
+
+    /* Detail sections */
+    .detail-section {
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .detail-section:last-child { border-bottom: none; }
+    .detail-section h3 {
+      font-size: 0.75rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ink-muted);
+      margin-bottom: 8px;
+    }
+    .detail-section p { font-size: 0.92rem; line-height: 1.6; }
+
+    /* Confidence bars */
+    .bar-list { display: flex; flex-direction: column; gap: 8px; }
+    .bar-row { display: flex; align-items: center; gap: 10px; }
+    .bar-label { font-size: 0.8rem; width: 84px; flex-shrink: 0; color: var(--ink-muted); }
+    .bar-track {
+      flex: 1; height: 8px;
+      background: var(--bg);
+      border-radius: 100px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 100px;
+      transition: width 0.6s cubic-bezier(.22,1,.36,1);
+    }
+    .bar-pct { font-size: 0.78rem; width: 40px; text-align: right; color: var(--ink-muted); }
+
+    /* Recommendation box */
+    .recommendation-box {
+      background: var(--accent-lt);
+      border-left: 3px solid var(--accent);
+      border-radius: 0 8px 8px 0;
+      padding: 14px 16px;
+      font-size: 0.9rem;
+      line-height: 1.6;
+      color: var(--ink);
+    }
+
+    /* Disclaimer */
+    .disclaimer {
+      font-size: 0.78rem;
+      color: var(--ink-muted);
+      text-align: center;
+      padding: 0 24px 20px;
+      line-height: 1.5;
+    }
+
+    /* ── Reset button ──────────────────────────────────────────────── */
+    #reset-btn {
+      display: none;
+      margin: 36px auto 20px auto;
+      background: var(--accent);
+      border: none;
+      color: #fff;
+      padding: 14px 36px;
+      border-radius: 100px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 1rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      box-shadow: 0 2px 12px rgba(196,98,45,0.12);
+      cursor: pointer;
+      transition: background 0.18s, color 0.18s, transform 0.08s, box-shadow 0.18s;
+      z-index: 100;
+    }
+    #reset-btn:hover, #reset-btn:focus {
+      background: #a94f20;
+      color: #fff;
+      outline: none;
+      transform: translateY(-2px) scale(1.03);
+      box-shadow: 0 6px 18px rgba(196,98,45,0.14);
+    }
+
+    /* ── Error ─────────────────────────────────────────────────────── */
+    #error-msg {
+      display: none;
+      background: #fde8e8;
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 0.9rem;
+      color: var(--red);
+    }
+
+    /* ── Mobile tweaks ─────────────────────────────────────────────── */
+    @media (max-width: 480px) {
+      .diagnosis-row { flex-direction: column; align-items: flex-start; gap: 10px; }
+      .bar-label { width: 72px; }
+      #reset-btn { width: 100%; font-size: 1rem; padding: 14px 0; border-radius: 16px; margin: 28px 0 12px 0; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Derma<span>Scan:</span> A Skin Analysis Tool</h1>
+  <p>AI-powered skin analysis · 8-class acne detection</p>
+</header>
+
+<main>
+
+  <!-- Upload -->
+  <div class="upload-card" id="upload-card">
+    <input type="file" id="file-input-gallery" accept="image/*" hidden/>
+    <input type="file" id="file-input-selfie-capture" accept="image/*" capture="user" hidden/>
+    <div class="upload-icon">
+      <svg viewBox="0 0 24 24" stroke-width="1.8">
+        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+        <circle cx="12" cy="13" r="4"/>
+      </svg>
+    </div>
+    <h2>Add a skin photo</h2>
+    <p>JPG, PNG — clear lighting works best · or drag & drop onto this card</p>
+    <div class="upload-actions">
+      <button type="button" class="btn-gallery" id="btn-choose-photo">Choose photo</button>
+      <button type="button" class="btn-selfie" id="btn-take-selfie">Take selfie</button>
+    </div>
+  </div>
+
+  <!-- Live camera (getUserMedia); fallback uses capture input on mobile -->
+  <div id="camera-modal" class="camera-modal" role="dialog" aria-modal="true" aria-label="Take selfie" aria-hidden="true">
+    <div class="camera-modal-backdrop" id="camera-backdrop"></div>
+    <div class="camera-modal-panel">
+      <video id="camera-video" playsinline autoplay muted></video>
+      <div class="camera-modal-actions">
+        <button type="button" id="camera-cancel">Cancel</button>
+        <button type="button" id="camera-capture">Capture</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Preview -->
+  <div id="preview-container">
+    <div class="skin-photo-frame skin-photo-frame--preview">
+      <img id="preview-img" src="" alt="Preview"/>
+    </div>
+    <div class="preview-bar">
+      <span id="file-name">—</span>
+      <button id="analyze-btn">Analyze Skin</button>
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div id="loading">
+    <div class="spinner"></div>
+    <p>Analyzing your skin…</p>
+  </div>
+
+  <!-- Error -->
+  <div id="error-msg"></div>
+
+  <!-- Results -->
+  <div id="results">
+    <div class="results-header">
+      <h2>Diagnosis Report</h2>
+      <p>AI-assisted analysis — not a medical diagnosis</p>
+    </div>
+
+    <div class="results-photo-hero">
+      <h3 class="results-photo-label">Your photo</h3>
+      <div class="skin-photo-frame skin-photo-frame--report">
+        <img id="results-photo-img" src="" alt="Photo you analyzed"/>
+      </div>
+      <span id="results-file-name" class="results-file-name"></span>
+    </div>
+
+    <div class="results-details">
+      <div class="diagnosis-row">
+        <span class="acne-badge" id="acne-badge">—</span>
+        <div>
+          <div class="confidence-label">Confidence: <strong id="confidence-val">—</strong></div>
+          <div class="confidence-label">Severity: <strong id="severity-val">—</strong></div>
+        </div>
+      </div>
+
+      <div class="detail-section">
+        <h3>What this means</h3>
+        <p id="description-val">—</p>
+      </div>
+
+      <div class="detail-section">
+        <h3>Recommendation</h3>
+        <div class="recommendation-box" id="recommendation-val">—</div>
+      </div>
+
+      <div class="detail-section">
+        <h3>Confidence by class</h3>
+        <div class="bar-list" id="bar-list"></div>
+      </div>
+    </div>
+
+    <div class="disclaimer">
+      This tool is for informational purposes only and does not replace professional medical advice.
+      Consult a licensed dermatologist for diagnosis and treatment.
+    </div>
+  </div>
+
+  <!-- Reset -->
+  <button id="reset-btn">← Analyze another photo</button>
+
+</main>
+
+<script>
+  const galleryInput = document.getElementById('file-input-gallery');
+  const selfieCaptureInput = document.getElementById('file-input-selfie-capture');
+  const btnChoosePhoto = document.getElementById('btn-choose-photo');
+  const btnTakeSelfie = document.getElementById('btn-take-selfie');
+  const cameraModal = document.getElementById('camera-modal');
+  const cameraVideo = document.getElementById('camera-video');
+  const cameraBackdrop = document.getElementById('camera-backdrop');
+  const cameraCancel = document.getElementById('camera-cancel');
+  const cameraCaptureBtn = document.getElementById('camera-capture');
+
+  const uploadCard     = document.getElementById('upload-card');
+  const previewContainer = document.getElementById('preview-container');
+  const previewImg     = document.getElementById('preview-img');
+  const fileNameEl     = document.getElementById('file-name');
+  const analyzeBtn     = document.getElementById('analyze-btn');
+  const loading        = document.getElementById('loading');
+  const results        = document.getElementById('results');
+  const resetBtn       = document.getElementById('reset-btn');
+  const errorMsg       = document.getElementById('error-msg');
+  const resultsPhotoImg = document.getElementById('results-photo-img');
+  const resultsFileNameEl = document.getElementById('results-file-name');
+
+  let selectedFile = null;
+  let previewObjectUrl = null;
+  let cameraStream = null;
+
+  function applySelectedImage(file) {
+    if (!file || !file.type.startsWith('image/')) return false;
+    selectedFile = file;
+    if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+    previewObjectUrl = URL.createObjectURL(file);
+    previewImg.src = previewObjectUrl;
+    fileNameEl.textContent = file.name;
+    previewContainer.style.display = 'block';
+    uploadCard.style.display = 'none';
+    hideError();
+    results.style.display = 'none';
+    resetBtn.style.display = 'none';
+    return true;
+  }
+
+  function stopCameraStream() {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach((t) => t.stop());
+      cameraStream = null;
+    }
+    cameraVideo.srcObject = null;
+  }
+
+  function closeCameraModal() {
+    cameraModal.classList.remove('is-open');
+    cameraModal.setAttribute('aria-hidden', 'true');
+    stopCameraStream();
+  }
+
+  async function openCameraModal() {
+    stopCameraStream();
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'user' } },
+      audio: false,
+    });
+    cameraStream = stream;
+    cameraVideo.srcObject = stream;
+    await cameraVideo.play();
+    cameraModal.classList.add('is-open');
+    cameraModal.setAttribute('aria-hidden', 'false');
+  }
+
+  btnChoosePhoto.addEventListener('click', () => galleryInput.click());
+
+  btnTakeSelfie.addEventListener('click', async () => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      selfieCaptureInput.click();
+      return;
+    }
+    try {
+      await openCameraModal();
+    } catch (err) {
+      console.warn('Camera unavailable, using device capture picker.', err);
+      selfieCaptureInput.click();
+    }
+  });
+
+  galleryInput.addEventListener('change', (e) => {
+    const file = e.target.files?.[0];
+    if (file) applySelectedImage(file);
+  });
+
+  selfieCaptureInput.addEventListener('change', (e) => {
+    const file = e.target.files?.[0];
+    if (file) applySelectedImage(file);
+  });
+
+  cameraCancel.addEventListener('click', closeCameraModal);
+  cameraBackdrop.addEventListener('click', closeCameraModal);
+
+  cameraCaptureBtn.addEventListener('click', () => {
+    const w = cameraVideo.videoWidth;
+    const h = cameraVideo.videoHeight;
+    if (!w || !h) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(cameraVideo, 0, 0);
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) return;
+        const file = new File([blob], `selfie-${Date.now()}.jpg`, { type: 'image/jpeg' });
+        applySelectedImage(file);
+        closeCameraModal();
+      },
+      'image/jpeg',
+      0.92
+    );
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && cameraModal.classList.contains('is-open')) {
+      closeCameraModal();
+    }
+  });
+
+  // ── Drag and drop ─────────────────────────────────────────────────
+  uploadCard.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadCard.classList.add('drag-over');
+  });
+  uploadCard.addEventListener('dragleave', () => uploadCard.classList.remove('drag-over'));
+  uploadCard.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadCard.classList.remove('drag-over');
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type.startsWith('image/')) {
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      galleryInput.files = dt.files;
+      applySelectedImage(file);
+    }
+  });
+
+  // ── Analyze ───────────────────────────────────────────────────────
+  analyzeBtn.addEventListener('click', async () => {
+    if (!selectedFile) return;
+
+    analyzeBtn.disabled = true;
+    previewContainer.style.display = 'none';
+    loading.style.display = 'block';
+    hideError();
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+
+    try {
+      const res = await fetch('/predict', { method: 'POST', body: formData });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        const d = err.detail;
+        let msg = 'Server error';
+        if (typeof d === 'string') msg = d;
+        else if (Array.isArray(d)) msg = d.map((x) => x.msg || JSON.stringify(x)).join('; ');
+        else if (d) msg = String(d);
+        throw new Error(msg);
+      }
+
+      const data = await res.json();
+      showResults(data);
+
+    } catch (err) {
+      showError(`Analysis failed: ${err.message}`);
+      previewContainer.style.display = 'block';
+    } finally {
+      loading.style.display = 'none';
+      analyzeBtn.disabled = false;
+    }
+  });
+
+  // ── Show results ──────────────────────────────────────────────────
+  function showResults(data) {
+    resultsPhotoImg.src = previewImg.src;
+    resultsPhotoImg.alt = 'Photo you analyzed';
+    resultsFileNameEl.textContent = fileNameEl.textContent || '';
+
+    // Badge
+    const badge = document.getElementById('acne-badge');
+    badge.textContent = data.predicted_class;
+    badge.className = `acne-badge sev-${data.severity.replace(' ', '-')}`;
+
+    document.getElementById('confidence-val').textContent = `${data.confidence}%`;
+    document.getElementById('severity-val').textContent   = data.severity;
+    document.getElementById('description-val').textContent = data.description;
+    document.getElementById('recommendation-val').textContent = data.recommendation;
+
+    // Confidence bars
+    const barList = document.getElementById('bar-list');
+    barList.innerHTML = '';
+    const sorted = Object.entries(data.all_confidences)
+      .sort((a, b) => b[1] - a[1]);
+
+    sorted.forEach(([cls, pct]) => {
+      const row = document.createElement('div');
+      row.className = 'bar-row';
+      row.innerHTML = `
+        <span class="bar-label">${cls}</span>
+        <div class="bar-track">
+          <div class="bar-fill" style="width: 0%" data-target="${pct}"></div>
+        </div>
+        <span class="bar-pct">${pct.toFixed(1)}%</span>
+      `;
+      barList.appendChild(row);
+    });
+
+    results.style.display = 'block';
+    resetBtn.style.display = 'block';
+
+    // Animate bars after render
+    requestAnimationFrame(() => {
+      document.querySelectorAll('.bar-fill').forEach(el => {
+        el.style.width = el.dataset.target + '%';
+      });
+    });
+
+    results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // ── Reset ─────────────────────────────────────────────────────────
+  resetBtn.addEventListener('click', () => {
+    selectedFile = null;
+    galleryInput.value = '';
+    selfieCaptureInput.value = '';
+    closeCameraModal();
+    if (previewObjectUrl) {
+      URL.revokeObjectURL(previewObjectUrl);
+      previewObjectUrl = null;
+    }
+    previewImg.src = '';
+    resultsPhotoImg.src = '';
+    resultsPhotoImg.alt = 'Photo you analyzed';
+    resultsFileNameEl.textContent = '';
+    fileNameEl.textContent = '—';
+    uploadCard.style.display = 'block';
+    previewContainer.style.display = 'none';
+    results.style.display = 'none';
+    resetBtn.style.display = 'none';
+    hideError();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  // ── Error helpers ─────────────────────────────────────────────────
+  function showError(msg) {
+    errorMsg.textContent = msg;
+    errorMsg.style.display = 'block';
+  }
+  function hideError() {
+    errorMsg.style.display = 'none';
+    errorMsg.textContent = '';
+  }
+</script>
+</body>
+</html>
